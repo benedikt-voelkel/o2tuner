@@ -2,7 +2,8 @@
 Optimise hook, wrapping parallelisation
 """
 
-from time import sleep
+from time import sleep, strftime
+from os.path import join
 from math import floor
 from multiprocessing import Process
 from multiprocessing import set_start_method as mp_set_start_method
@@ -12,6 +13,7 @@ from o2tuner.io import make_dir, parse_yaml
 from o2tuner.backends import OptunaHandler
 from o2tuner.sampler import construct_sampler
 from o2tuner.inspector import O2TunerInspector
+from o2tuner.system import Monitor
 from o2tuner.log import Log
 
 # Do this to run via fork by default on latest iOS
@@ -63,8 +65,9 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
 
     trials_list = floor(trials / jobs)
     trials_list = [trials_list] * jobs
-    # add the left-over trials simply to the last job for now
-    trials_list[-1] += trials - sum(trials_list)
+    # add the left-over trials
+    for i in range(trials - sum(trials_list)):
+        trials_list[i] += 1
 
     LOG.info(f"Number of jobs: {jobs}\nNumber of trials: {trials}")
 
@@ -72,18 +75,33 @@ def optimise(objective, optuna_config, *, work_dir="o2tuner_optimise", user_conf
 
     make_dir(work_dir)
 
+    monitor = Monitor()
     procs = []
     for trial in trials_list:
         procs.append(Process(target=optimise_run, args=(objective, optuna_storage_config, sampler, trial, work_dir, user_config, run_serial)))
         procs[-1].start()
-        sleep(5)
+        sleep(1)
+        monitor.add_pid(procs[-1].pid)
+
+    monitor.start()
 
     while True:
         is_alive = any(p.is_alive() for p in procs)
         if not is_alive:
             break
+
         # We assume here that the optimisation might take some time, so we can sleep for a bit
         sleep(10)
+
+    monitor.stop()
+
+    for proc in procs:
+        proc.join()
+        proc.close()
+
+    save_dir = join(work_dir, "resources", strftime("%Y%m%d_%H%M"))
+    make_dir(save_dir)
+    monitor.save(save_dir)
 
     insp = O2TunerInspector()
     insp.load(optuna_config, work_dir, user_config)
