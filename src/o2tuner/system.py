@@ -62,3 +62,36 @@ def import_function_from_file(path, function_name):
     path = abspath(path)
     module_name = load_file_as_module(path, path.replace("/", "_").replace(".", "_"))
     return import_function_from_module(module_name, function_name)
+
+
+def signal_handler(signum, _frame):
+    """
+    On the shoulders of O2DPG o2_dpg_workflow_runner
+
+    We need the second argument which is expected when this function is passed to signal
+    """
+    LOG.info(f"Signal {signum} caught")
+    try:
+        procs = psutil.Process().children(recursive=True)
+    except psutil.NoSuchProcess:
+        pass
+    # We might to re-enable the following, let's decide after testing
+    # except (psutil.AccessDenied, PermissionError):
+    #     procs = getChildProcs(os.getpid())
+
+    for proc in procs:
+        LOG.info(f"Terminating {proc}")
+        try:
+            proc.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    _, alive = psutil.wait_procs(procs, timeout=5)
+    for proc in alive:
+        try:
+            LOG.info(f"Killing {proc}")
+            proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    sys.exit(1)

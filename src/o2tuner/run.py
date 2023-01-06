@@ -3,8 +3,9 @@ Utility to run stages, bound to main entrypoint run action
 """
 from os.path import join, abspath, expanduser, dirname
 from os import getcwd, chdir
+import signal
 
-from o2tuner.system import run_command, import_function_from_file
+from o2tuner.system import run_command, import_function_from_file, signal_handler
 from o2tuner.optimise import optimise
 from o2tuner.io import make_dir
 from o2tuner.config import Configuration, get_work_dir, CONFIG_STAGES_USER_KEY, CONFIG_STAGES_OPTIMISATION_KEY, CONFIG_STAGES_EVALUATION_KEY
@@ -160,6 +161,9 @@ def run(args):
     """
     arparse will execute this function
     """
+    # Prepare signal handling
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.siginterrupt(signal.SIGINT, False)
     # This will already fail if the config is found not to be sane
     config = Configuration(args.config, args.script_dir or dirname(args.config))
     config.set_work_dir(abspath(expanduser(args.work_dir)))
