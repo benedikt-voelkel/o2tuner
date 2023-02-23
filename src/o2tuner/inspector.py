@@ -4,6 +4,7 @@ Mainstream and custom backends should be placed here
 import sys
 from math import sqrt, ceil
 from collections import OrderedDict
+from numbers import Number
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -342,6 +343,21 @@ class O2TunerInspector:
         param_values.append(losses)
         params_plot.append("loss")
         params_labels.append("loss")
+        param_values_map = [None] * len(param_values)
+
+        for i, _ in enumerate(param_values):
+            if any((not isinstance(pv, Number) or isinstance(pv, bool)) and pv is not None for pv in param_values[i]):
+                map_values = {}
+                new_values = []
+                for p_value in param_values[i]:
+                    ind = map_values.get(p_value, len(map_values))
+                    map_values[p_value] = ind
+                    new_values.append(ind)
+                param_values_map[i] = [None] * len(map_values)
+                for key, value in map_values.items():
+                    param_values_map[i][value] = key
+                param_values[i] = new_values
+
         df = pd.DataFrame(list(zip(*param_values)), columns=params_plot)
 
         # compute correlations and get "loss" column which has the data interesting for us
@@ -351,7 +367,7 @@ class O2TunerInspector:
         # Set up the matplotlib figure
         figure, axes = plt.subplots(len(params_labels) + 1, 1, sharex=True, figsize=(20, 40))
         axes = axes.flatten()
-        for i, (ax, name, values, corr) in enumerate(zip(axes, params_labels, param_values, corr_loss)):
+        for i, (ax, name, values, category_mapping, corr) in enumerate(zip(axes, params_labels, param_values, param_values_map, corr_loss)):
             title = f"{name}, correlation with loss: {corr}"
             color = "tab:blue"
             if i == len(axes) - 2:
@@ -367,6 +383,9 @@ class O2TunerInspector:
             ax.set_ylabel("value", fontsize=20)
             ax.tick_params("both", labelsize=20)
             ax.set_title(title, fontsize=20)
+            if category_mapping:
+                ax.set_yticks(range(len(cat_mapping)))
+                ax.set_yticklabels(cat_mapping)
 
         legend_lines = [Line2D([0], [0], color="black", lw=2),
                         Line2D([0], [0], color="black", lw=2, ls="--")]
